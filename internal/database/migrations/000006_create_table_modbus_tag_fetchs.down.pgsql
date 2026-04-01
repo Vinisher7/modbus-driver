@@ -1,0 +1,3 @@
+BEGIN;
+DROP TABLE IF EXISTS modbus_tag_fetchs;
+COMMIT;

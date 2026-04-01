@@ -2,59 +2,58 @@ package main
 
 import (
 	"context"
-	"log"
+	"modbus-driver/internal/config"
+	"modbus-driver/internal/config/database"
+	"modbus-driver/internal/config/logger"
+	"modbus-driver/internal/modbus"
+	"modbus-driver/internal/mqtt"
 	"os"
 	"os/signal"
 	"syscall"
 
-	"modbus-driver/internal/config"
-	"modbus-driver/internal/database"
-	modbuspkg "modbus-driver/internal/modbus"
-	mqttpkg "modbus-driver/internal/mqtt"
+	"go.uber.org/zap"
 )
 
 func main() {
-	cfg, err := config.Load()
-	if err != nil {
-		log.Fatalf("config: %v", err)
-	}
+	logger.Info("Starting application...")
 
-	// ── Banco de dados ────────────────────────────────────────────────
-	db, err := database.Connect(cfg)
-	if err != nil {
-		log.Fatalf("database: %v", err)
-	}
-	defer db.Close()
-	log.Println("[DB] connected to SQL Server")
+	// // ── Banco de dados ────────────────────────────────────────────────
+	ctx := context.Background()
 
-	// ── Carrega metadados no startup ──────────────────────────────────
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	db, err := database.NewPostgresClient(ctx)
+	if err != nil {
+		logger.Error("NewPostgresClient func returned an error", err, zap.String("journey", "database"))
+		panic(err)
+	}
+	defer db.Close(ctx)
+
+	err = database.TestPostgresConnection(ctx, db)
+	if err != nil {
+		logger.Error("TestPostgresConnection func returned an error", err, zap.String("journey", "database"))
+		panic(err)
+	}
 
 	devices, err := database.LoadDevices(ctx, db)
 	if err != nil {
-		log.Fatalf("load devices: %v", err)
-	}
-	log.Printf("[DB] loaded %d modbus devices", len(devices))
-
-	if len(devices) == 0 {
-		log.Fatal("no modbus devices found — check the database and protocol column")
+		logger.Error("LoadDevices func returned an error", err, zap.String("journey", "database"))
+		panic(err)
 	}
 
 	// ── MQTT Publisher ────────────────────────────────────────────────
-	pub, err := mqttpkg.NewPublisher(cfg)
+	pub, err := mqtt.NewPublisher(config.NewMqttConfig())
 	if err != nil {
-		log.Fatalf("mqtt: %v", err)
+		logger.Error("NewPublisher func returned an error", err, zap.String("journey", "publisher"))
+		panic(err)
 	}
 
 	// ── Driver ───────────────────────────────────────────────────────
-	driver := modbuspkg.NewDriver(cfg, pub)
-	go driver.RunPollLoop(ctx, devices)
+	driver := modbus.NewDriver(pub)
+	go driver.RunPollLoop(ctx, devices, config.NewModbusConfig())
 
 	// ── Graceful shutdown ─────────────────────────────────────────────
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
-	log.Println("shutting down...")
-	cancel()
+	logger.Info("Shutting down application...")
+
 }

@@ -2,45 +2,62 @@ package mqtt
 
 import (
 	"fmt"
-	"log"
+	"modbus-driver/internal/config"
+	"modbus-driver/internal/config/logger"
 	"time"
 
-	"modbus-driver/internal/config"
-
 	paho "github.com/eclipse/paho.mqtt.golang"
+	"go.uber.org/zap"
 )
 
 type Publisher struct {
 	client paho.Client
 }
 
-func NewPublisher(cfg *config.Config) (*Publisher, error) {
+func NewPublisher(mqtt *config.MQTT) (pub *Publisher, err error) {
+	logger.Info("Init NewPublisher", zap.String("journey", "publisher"))
+
 	opts := paho.NewClientOptions().
-		AddBroker(cfg.MQTTBroker).
-		SetClientID(cfg.MQTTClientID).
+		AddBroker(mqtt.Broker).
+		SetClientID(mqtt.ClientID + "-pub").
 		SetCleanSession(true).
 		SetAutoReconnect(true).
 		SetConnectTimeout(10 * time.Second)
 
-	if cfg.MQTTUsername != "" {
-		opts.SetUsername(cfg.MQTTUsername).SetPassword(cfg.MQTTPassword)
+	if mqtt.Username == "" {
+		err = fmt.Errorf("mqtt username is empty")
+		logger.Error("Getenv func returned an error", err, zap.String("journey", "publisher"))
+		return pub, err
 	}
+
+	opts.SetUsername(mqtt.Username).SetPassword(mqtt.Password)
 
 	c := paho.NewClient(opts)
 	if tok := c.Connect(); tok.Wait() && tok.Error() != nil {
-		return nil, fmt.Errorf("mqtt connect: %w", tok.Error())
+		logger.Error("Connect func returned an error", err, zap.String("journey", "publisher"))
+		return pub, fmt.Errorf("error creating a connection with the message broker: %w", tok.Error())
 	}
-	log.Println("[MQTT] connected to", cfg.MQTTBroker)
-	return &Publisher{client: c}, nil
+
+	logger.Info("NewPublisher executed successfully", zap.String("journey", "publisher"))
+
+	return &Publisher{
+		client: c,
+	}, nil
 }
 
-// Publish envia payload JSON para o tópico correto
-// tópico: /devices/formatted_data/erd/{deviceUUID}/{tagName}
-func (p *Publisher) Publish(deviceUUID, tagID, payload string) {
-	topic := fmt.Sprintf("/devices/formatted_data/erd/%s/%s", deviceUUID, tagID)
+func (p *Publisher) Publish(deviceID, tagID, payload string) {
+	logger.Info("Init Publish", zap.String("journey", "publisher"))
+
+	topic := fmt.Sprintf("/devices/formatted_data/erd/%s/%s", deviceID, tagID)
+
 	tok := p.client.Publish(topic, 0, true, payload)
+
 	tok.Wait()
+
 	if err := tok.Error(); err != nil {
-		log.Printf("[MQTT] publish error topic=%s err=%v", topic, err)
+		message := fmt.Sprintf("Publish func returned an error on topic=%s", topic)
+		logger.Error(message, err, zap.String("journey", "publisher"))
 	}
+
+	logger.Info("Publish executed successfully", zap.String("journey", "publisher"))
 }

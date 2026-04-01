@@ -1,0 +1,3 @@
+BEGIN;
+DROP TYPE IF EXISTS data_type_enum;
+COMMIT;
