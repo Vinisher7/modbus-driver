@@ -48,7 +48,7 @@ func NewPublisher(mqtt *config.MQTT) (pub *Publisher, err error) {
 func (p *Publisher) Publish(deviceID, tagID, payload string) {
 	logger.Info("Init Publish", zap.String("journey", "publisher"))
 
-	topic := fmt.Sprintf("/devices/formatted_data/erd/%s/%s", deviceID, tagID)
+	topic := fmt.Sprintf("formatted/erd/%s/%s", deviceID, tagID)
 
 	tok := p.client.Publish(topic, 0, true, payload)
 
