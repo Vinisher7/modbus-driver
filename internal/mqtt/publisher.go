@@ -63,3 +63,20 @@ func (p *Publisher) Publish(deviceID, tagID, payload string) {
 
 	logger.Info("Publish executed successfully", zap.String("journey", "publisher"))
 }
+
+func (p *Publisher) PublishHealth(deviceID, payload string) {
+	logger.Info("Init PublishHealth", zap.String("journey", "publisher"))
+
+	topic := fmt.Sprintf("health/%s/%s", p.tenantCode, deviceID)
+
+	tok := p.client.Publish(topic, 0, true, payload)
+
+	tok.Wait()
+
+	if err := tok.Error(); err != nil {
+		message := fmt.Sprintf("PublishHealth func returned an error on topic=%s", topic)
+		logger.Error(message, err, zap.String("journey", "publisher"))
+	}
+
+	logger.Info("PublishHealth executed successfully", zap.String("journey", "publisher"))
+}

@@ -17,7 +17,8 @@ import (
 )
 
 type Driver struct {
-	publisher *mqttpkg.Publisher
+	publisher    *mqttpkg.Publisher
+	deviceStatus sync.Map // map[string]string → deviceID → "online"|"offline"
 }
 
 func NewDriver(pub *mqttpkg.Publisher) *Driver {
@@ -29,6 +30,27 @@ func NewDriver(pub *mqttpkg.Publisher) *Driver {
 
 	logger.Info("NewDriver executed successfully", zap.String("journey", "modbus"))
 	return driver
+}
+
+// setAndPublishHealth publishes the health status to MQTT only when the
+// device status transitions (e.g. online → offline or first report).
+func (d *Driver) setAndPublishHealth(deviceID, status string) {
+	prev, loaded := d.deviceStatus.LoadOrStore(deviceID, status)
+	if loaded && prev.(string) == status {
+		return // no state change, skip publish
+	}
+	d.deviceStatus.Store(deviceID, status)
+
+	payload, _ := json.Marshal(models.HealthPayload{
+		Timestamp: time.Now().UTC().Format(time.RFC3339),
+		Status:    status,
+	})
+	d.publisher.PublishHealth(deviceID, string(payload))
+
+	logger.Info(
+		fmt.Sprintf("device=%s health transitioned to %s", deviceID, status),
+		zap.String("journey", "health"),
+	)
 }
 
 func (d *Driver) RunPollLoop(ctx context.Context, devices []models.Device, mb *config.Modbus) {
@@ -94,9 +116,12 @@ func (d *Driver) pollDevice(ctx context.Context, dev models.Device, mb *config.M
 	cli, err := NewClient(dev.Host, dev.Port, dev.UnitID, mb.Timeout)
 	if err != nil {
 		logger.Error("NewClient func returned an error", err, zap.String("journey", "modbus"))
+		d.setAndPublishHealth(dev.DeviceID, "offline")
 		return err
 	}
 	defer cli.Close()
+
+	d.setAndPublishHealth(dev.DeviceID, "online")
 
 	for _, fetch := range dev.Fetches {
 		select {

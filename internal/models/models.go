@@ -53,3 +53,8 @@ type MQTTPayload struct {
 	Timestamp string `json:"TS"`
 	Val       string `json:"Val"`
 }
+
+type HealthPayload struct {
+	Timestamp string `json:"TS"`
+	Status    string `json:"Status"`
+}
