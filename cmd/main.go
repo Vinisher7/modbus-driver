@@ -11,10 +11,15 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/joho/godotenv"
 	"go.uber.org/zap"
 )
 
 func main() {
+	if err := godotenv.Load(); err != nil {
+		logger.Info("No .env file found, using environment variables")
+	}
+
 	logger.Info("Starting application...")
 
 	// // ── Banco de dados ────────────────────────────────────────────────

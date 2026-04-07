@@ -11,7 +11,8 @@ import (
 )
 
 type Publisher struct {
-	client paho.Client
+	client     paho.Client
+	tenantCode string
 }
 
 func NewPublisher(mqtt *config.MQTT) (pub *Publisher, err error) {
@@ -41,14 +42,15 @@ func NewPublisher(mqtt *config.MQTT) (pub *Publisher, err error) {
 	logger.Info("NewPublisher executed successfully", zap.String("journey", "publisher"))
 
 	return &Publisher{
-		client: c,
+		client:     c,
+		tenantCode: mqtt.TenantCode,
 	}, nil
 }
 
 func (p *Publisher) Publish(deviceID, tagID, payload string) {
 	logger.Info("Init Publish", zap.String("journey", "publisher"))
 
-	topic := fmt.Sprintf("formatted/erd/%s/%s", deviceID, tagID)
+	topic := fmt.Sprintf("formatted/%s/%s/%s", p.tenantCode, deviceID, tagID)
 
 	tok := p.client.Publish(topic, 0, true, payload)
 
