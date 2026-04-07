@@ -16,16 +16,24 @@ import (
 	"go.uber.org/zap"
 )
 
+// HealthPublisher is the interface used by the Driver to publish health status.
+// Extracted as an interface to allow mock injection in tests.
+type HealthPublisher interface {
+	PublishHealth(deviceID, payload string)
+}
+
 type Driver struct {
-	publisher    *mqttpkg.Publisher
-	deviceStatus sync.Map // map[string]string → deviceID → "online"|"offline"
+	publisher       *mqttpkg.Publisher
+	publisherHealth HealthPublisher
+	deviceStatus    sync.Map // map[string]string → deviceID → "online"|"offline"
 }
 
 func NewDriver(pub *mqttpkg.Publisher) *Driver {
 	logger.Info("Init NewDriver", zap.String("journey", "modbus"))
 
 	driver := &Driver{
-		publisher: pub,
+		publisher:       pub,
+		publisherHealth: pub,
 	}
 
 	logger.Info("NewDriver executed successfully", zap.String("journey", "modbus"))
@@ -45,7 +53,7 @@ func (d *Driver) setAndPublishHealth(deviceID, status string) {
 		Timestamp: time.Now().UTC().Format(time.RFC3339),
 		Status:    status,
 	})
-	d.publisher.PublishHealth(deviceID, string(payload))
+	d.publisherHealth.PublishHealth(deviceID, string(payload))
 
 	logger.Info(
 		fmt.Sprintf("device=%s health transitioned to %s", deviceID, status),
